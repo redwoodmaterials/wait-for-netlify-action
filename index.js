@@ -32,7 +32,9 @@ const waitForDeployCreation = (url, commitSha, MAX_TIMEOUT, context) => {
         return reject(`Failed to get deployments for site`);
       }
 
-      const commitDeployment = netlifyDeployments.find((d) => d.commit_ref === commitSha && (!context || d.context === context));
+      const commitDeployment = netlifyDeployments.find(
+        (d) => d.commit_ref === commitSha && (!context || d.context === context)
+      );
 
       if (commitDeployment) {
         clearInterval(handle);
@@ -82,7 +84,10 @@ const waitForUrl = async (url, MAX_TIMEOUT) => {
       await axios.head(url);
       return;
     } catch (e) {
-      console.log(`URL ${url} unavailable, retrying...\n\t`, { errorCode: e && e.code, errorMessage: e && e.message });
+      console.log(`URL ${url} unavailable, retrying...\n\t`, {
+        errorCode: e && e.code,
+        errorMessage: e && e.message,
+      });
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
@@ -93,7 +98,9 @@ const run = async () => {
   try {
     const netlifyToken = process.env.NETLIFY_TOKEN;
     const commitSha =
-      github.context.eventName === 'pull_request' ? github.context.payload.pull_request.head.sha : github.context.sha;
+      github.context.eventName === 'pull_request'
+        ? github.context.payload.pull_request.head.sha
+        : github.context.sha;
     const MAX_CREATE_TIMEOUT = 60 * 5; // 5 min
     const MAX_WAIT_TIMEOUT = 60 * 15; // 15 min
     const MAX_READY_TIMEOUT = Number(core.getInput('max_timeout')) || 60;
@@ -101,7 +108,9 @@ const run = async () => {
     const context = core.getInput('context');
 
     if (!netlifyToken) {
-      core.setFailed('Please set NETLIFY_TOKEN env variable to your Netlify Personal Access Token secret');
+      core.setFailed(
+        'Please set NETLIFY_TOKEN env variable to your Netlify Personal Access Token secret'
+      );
     }
     if (!commitSha) {
       core.setFailed('Could not determine GitHub commit');
@@ -113,7 +122,7 @@ const run = async () => {
     let message = `Waiting for Netlify to create a deployment for git SHA ${commitSha}`;
 
     if (context) {
-      message += ` and context ${context}`
+      message += ` and context ${context}`;
     }
 
     console.log(message);
@@ -129,7 +138,9 @@ const run = async () => {
     core.setOutput('deploy_id', commitDeployment.id);
     core.setOutput('url', url);
 
-    console.log(`Waiting for Netlify deployment ${commitDeployment.id} in site ${commitDeployment.name} to be ready`);
+    console.log(
+      `Waiting for Netlify deployment ${commitDeployment.id} in site ${commitDeployment.name} to be ready`
+    );
     await waitForReadiness(
       `https://api.netlify.com/api/v1/sites/${siteId}/deploys/${commitDeployment.id}`,
       MAX_WAIT_TIMEOUT
