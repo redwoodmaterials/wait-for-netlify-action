@@ -53,7 +53,7 @@ const waitForDeployCreation = async (url, commitSha, timeoutSeconds, context) =>
 
 const waitForReadiness = (url, timeoutSeconds) => {
   const startTime = Date.now();
-  const retrySeconds = 15;
+  const retrySeconds = 10;
   let latestDeployState = '(unknown)';
 
   return checkContinually();
