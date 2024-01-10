@@ -12,73 +12,83 @@ function getNetlifyUrl(url) {
   });
 }
 
-const waitForDeployCreation = (url, commitSha, MAX_TIMEOUT, context) => {
-  const increment = 15;
+const waitForDeployCreation = async (url, commitSha, timeoutSeconds, context) => {
+  const startTime = Date.now();
+  const retrySeconds = 5;
 
-  return new Promise((resolve, reject) => {
-    let elapsedTimeSeconds = 0;
+  return checkContinually();
 
-    const handle = setInterval(async () => {
-      elapsedTimeSeconds += increment;
+  async function checkContinually() {
+    const currentDeployment = await getCurrentDeploymentIfCreated();
+    if (currentDeployment) {
+      console.log(`Deployment created (${ellapsedSeconds(startTime)}s)`);
+      return currentDeployment;
+    }
 
-      if (elapsedTimeSeconds >= MAX_TIMEOUT) {
-        clearInterval(handle);
-        return reject(`Timeout reached: Deployment was not created within ${MAX_TIMEOUT} seconds.`);
-      }
-
-      const { data: netlifyDeployments } = await getNetlifyUrl(url);
-
-      if (!netlifyDeployments) {
-        return reject(`Failed to get deployments for site`);
-      }
-
-      const commitDeployment = netlifyDeployments.find(
-        (d) => d.commit_ref === commitSha && (!context || d.context === context)
+    // Timeout
+    if (ellapsedSeconds() > timeoutSeconds) {
+      throw new Error(
+        `Timeout reached: Deployment was not ready within ${timeoutSeconds} seconds.`
       );
+    }
 
-      if (commitDeployment) {
-        clearInterval(handle);
-        return resolve(commitDeployment);
-      }
+    // Retry
+    console.log(`Deploy not yet created. Trying again in ${retrySeconds} seconds...`);
+    await waitForSeconds(retrySeconds);
+    return checkContinually();
+  }
 
-      console.log(`Not yet created, waiting ${increment} more seconds...`);
-    }, increment * 1000);
-  });
+  async function getCurrentDeploymentIfCreated() {
+    // Get list of all deployments
+    const { data: netlifyDeployments } = await getNetlifyUrl(url);
+    if (!netlifyDeployments) {
+      throw new Error(`Failed to get deployments for site`);
+    }
+    // Attempt to find current deployment
+    return netlifyDeployments.find(
+      (d) => d.commit_ref === commitSha && (!context || d.context === context)
+    );
+  }
 };
 
-const waitForReadiness = (url, MAX_TIMEOUT) => {
-  const increment = 30;
+const waitForReadiness = (url, timeoutSeconds) => {
+  const startTime = Date.now();
+  const retrySeconds = 15;
+  let latestDeployState = '(unknown)';
 
-  return new Promise((resolve, reject) => {
-    let elapsedTimeSeconds = 0;
-    let state;
+  return checkContinually();
 
-    const handle = setInterval(async () => {
-      elapsedTimeSeconds += increment;
+  async function checkContinually() {
+    const isReady = await isCurrentDeploymentReady();
+    if (isReady) {
+      console.log(`Deployment ready (${ellapsedSeconds(startTime)}s)`);
+      return;
+    }
 
-      if (elapsedTimeSeconds >= MAX_TIMEOUT) {
-        clearInterval(handle);
-        return reject(
-          `Timeout reached: Deployment was not ready within ${MAX_TIMEOUT} seconds. Last known deployment state: ${state}.`
-        );
-      }
+    // Timeout
+    if (ellapsedSeconds() > timeoutSeconds) {
+      throw new Error(
+        `Timeout reached: Deployment was not ready within ${timeoutSeconds} seconds. Last known deployment state: ${latestDeployState}.`
+      );
+    }
 
-      const { data: deploy } = await getNetlifyUrl(url);
+    // Retry
+    console.log(
+      `Deploy not yet ready (state = ${latestDeployState}). Trying again in ${retrySeconds} seconds...`
+    );
+    await waitForSeconds(retrySeconds);
+    return checkContinually();
+  }
 
-      state = deploy.state;
-
-      if (READY_STATES.includes(state)) {
-        clearInterval(handle);
-        return resolve();
-      }
-
-      console.log(`Not yet ready, waiting ${increment} more seconds...`);
-    }, increment * 1000);
-  });
+  async function isCurrentDeploymentReady() {
+    const { data: deploy } = await getNetlifyUrl(url);
+    latestDeployState = deploy.state;
+    return READY_STATES.includes(latestDeployState);
+  }
 };
 
-const waitForUrl = async (url, MAX_TIMEOUT) => {
-  const iterations = MAX_TIMEOUT / 3;
+const waitForUrl = async (url, timeoutSeconds) => {
+  const iterations = timeoutSeconds / 3;
   for (let i = 0; i < iterations; i++) {
     try {
       await axios.head(url);
@@ -103,7 +113,7 @@ const run = async () => {
         : github.context.sha;
     const MAX_CREATE_TIMEOUT = 60 * 5; // 5 min
     const MAX_WAIT_TIMEOUT = 60 * 15; // 15 min
-    const MAX_READY_TIMEOUT = Number(core.getInput('max_timeout')) || 60;
+    const MAX_READY_TIMEOUT = Number(core.getInput('timeoutSeconds')) || 60;
     const siteId = core.getInput('site_id');
     const context = core.getInput('context');
 
@@ -154,3 +164,16 @@ const run = async () => {
 };
 
 run();
+
+//
+// Utils
+//
+
+function ellapsedSeconds(timestamp) {
+  const seconds = (Date.now() - timestamp) / 1000;
+  return Math.round(seconds * 10) / 10;
+}
+
+function waitForSeconds(seconds) {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+}
