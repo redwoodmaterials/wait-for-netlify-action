@@ -113,7 +113,7 @@ const run = async () => {
         : github.context.sha;
     const MAX_CREATE_TIMEOUT = 60 * 5; // 5 min
     const MAX_WAIT_TIMEOUT = 60 * 15; // 15 min
-    const MAX_READY_TIMEOUT = Number(core.getInput('timeoutSeconds')) || 60;
+    const MAX_READY_TIMEOUT = Number(core.getInput('max_timeout')) || 60;
     const siteId = core.getInput('site_id');
     const context = core.getInput('context');
 
